@@ -6,6 +6,7 @@
     border-radius: 3px;
     height: 110px;
     width: 110px;
+    vertical-align: top;
 }
 .pool .square {
     border-color: orange;
