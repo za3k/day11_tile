@@ -1,5 +1,6 @@
-COLORS = ["red", "green", "blue", "white"]
-TILES = [
+'use strict';
+const COLORS = ["red", "green", "blue", "white"]
+const TILES = [
     [0,0,0,1],
     [2,0,2,1],
     [0,1,1,1],
@@ -21,15 +22,54 @@ function Tile(i) {
         left: TILES[i][3],
         html: $(`<svg class="tile" id="${Tile.nextId++}"><g transform="scale(50)"><rect fill="${COLORS[TILES[i][3]]}" height="2" width="2"/><path d="M 1,1 L 0,0 L 2,0 Z" stroke-width="0.02" stroke="${COLORS[TILES[i][0]]}" fill="${COLORS[TILES[i][0]]}" /><path d="M 1,1 L 2,0 L 2,2 Z" stroke-width="0.02" stroke="${COLORS[TILES[i][1]]}" fill="${COLORS[TILES[i][1]]}" /><path d="M 1,1 L 2,2 L 0,2 Z" stroke-width="0.02" stroke="${COLORS[TILES[i][2]]}" fill="${COLORS[TILES[i][2]]}" /><rect fill="none" width="2" height="2" stroke="#000" stroke-width="0.04" width="100"/></g></svg>`),
         markDraggable() {
-            this.html.attr("draggable", "true");
-            this.html.on("dragstart", this.onDragStart.bind(this));
+            this.html.on("mousedown", this.onMouseDown.bind(this));
         },
         markUndraggable() {
-            this.html.removeAttr("draggable");
+            this.html.off("mousedown");
+            this.html.off("mouseup");
+            this.html.off("mousemove");
         },
-        onDragStart(ev) {
-            console.log(ev);
-            ev.originalEvent.dataTransfer.setData("text", ev.originalEvent.currentTarget.id);
+        onMouseDown(ev) {
+            let shiftX = ev.clientX - this.html[0].getBoundingClientRect().left;
+            let shiftY = ev.clientY - this.html[0].getBoundingClientRect().top;
+            const oldParent = this.html.parent();
+
+            this.html.css("position", "absolute");
+            this.html.toggleClass("dragged", true);
+            this.html.css("zIndex", 1000);
+            $("body").append(this.html);
+
+            let currentDroppable = null;
+
+            function moveAt(pageX, pageY){
+                this.html.css("left", pageX - shiftX + "px");
+                this.html.css("top", pageY - shiftY + "px");
+            }
+
+            function onMouseUp(ev) {
+                $(document).off("mousemove");
+                this.html.toggleClass("dragged", false);
+                $(currentDroppable).css("border", "1px solid black");
+                //game.dragAndDrop(oldParent, newParent);
+            }
+
+            function onMouseMove(ev) {
+                moveAt.bind(this)(ev.pageX, ev.pageY);
+
+                let square = null;
+                this.html[0].hidden = true;
+                let elemBelow = document.elementFromPoint(ev.clientX, ev.clientY); // This is grabbing part of the SVG. why?
+                this.html[0].hidden = false;
+                if (elemBelow) square = elemBelow.closest(".square");
+                currentDroppable = square;
+            }
+
+            $(document).on("mousemove", onMouseMove.bind(this));
+            this.html.on("mouseup", onMouseUp.bind(this));
+        },
+        snapBack() {
+            this.oldParent.append(this.html);
+            this.oldParent = null;
         },
         markInert() {
             this.html.toggleClass("valid", false);

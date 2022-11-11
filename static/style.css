@@ -13,6 +13,10 @@
     display: inline-block;
 }
 
+.tile.dragged {
+    opacity: 50%;
+}
+
 .tile {
     border: 2px solid black;
     height: 100px;
