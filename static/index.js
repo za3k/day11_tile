@@ -1,5 +1,6 @@
 'use strict';
-const COLORS = ["red", "green", "blue", "white"]
+//const COLORS = ["red", "green", "blue", "white"]
+const COLORS = ["#994F00", "#006CD1", "#E1BE6A", "#40B0A6"]
 const TILES = [
     [0,0,0,1],
     [2,0,2,1],
@@ -15,14 +16,17 @@ const TILES = [
 ]
 
 function Tile(i) {
+    const id = Tile.nextId++;
     return {
         top: TILES[i][0],
         right: TILES[i][1],
         bottom: TILES[i][2],
         left: TILES[i][3],
-        html: $(`<svg class="tile" id="${Tile.nextId++}"><g transform="scale(50)"><rect fill="${COLORS[TILES[i][3]]}" height="2" width="2"/><path d="M 1,1 L 0,0 L 2,0 Z" stroke-width="0.02" stroke="${COLORS[TILES[i][0]]}" fill="${COLORS[TILES[i][0]]}" /><path d="M 1,1 L 2,0 L 2,2 Z" stroke-width="0.02" stroke="${COLORS[TILES[i][1]]}" fill="${COLORS[TILES[i][1]]}" /><path d="M 1,1 L 2,2 L 0,2 Z" stroke-width="0.02" stroke="${COLORS[TILES[i][2]]}" fill="${COLORS[TILES[i][2]]}" /><rect fill="none" width="2" height="2" stroke="#000" stroke-width="0.04" width="100"/></g></svg>`),
+        html: $(`<svg class="tile" id="${Tile.nextId++}"><g transform="scale(40)"><rect fill="${COLORS[TILES[i][3]]}" height="2" width="2"/><path d="M 1,1 L 0,0 L 2,0 Z" stroke-width="0.02" stroke="${COLORS[TILES[i][0]]}" fill="${COLORS[TILES[i][0]]}" /><path d="M 1,1 L 2,0 L 2,2 Z" stroke-width="0.02" stroke="${COLORS[TILES[i][1]]}" fill="${COLORS[TILES[i][1]]}" /><path d="M 1,1 L 2,2 L 0,2 Z" stroke-width="0.02" stroke="${COLORS[TILES[i][2]]}" fill="${COLORS[TILES[i][2]]}" /><rect fill="none" width="2" height="2" stroke="#000" stroke-width="0.04"/></g></svg>`),
+        id: id,
         markDraggable() {
-            this.html.on("mousedown", this.onMouseDown.bind(this));
+            if (!this.draggable) this.html.on("mousedown", this.onMouseDown.bind(this));
+            this.draggable = true;
         },
         markUndraggable() {
             this.html.off("mousedown");
@@ -32,7 +36,15 @@ function Tile(i) {
         onMouseDown(ev) {
             let shiftX = ev.clientX - this.html[0].getBoundingClientRect().left;
             let shiftY = ev.clientY - this.html[0].getBoundingClientRect().top;
-            const oldParent = this.html.parent();
+
+            const moveAt = ((pageX, pageY) => {
+                this.html.css("left", pageX - shiftX + "px");
+                this.html.css("top", pageY - shiftY + "px");
+            }).bind(this);
+            moveAt(ev.pageX, ev.pageY);
+
+            const oldParentHtml = this.html.parent();
+            if (!oldParentHtml) throw "HUH!??";
 
             this.html.css("position", "absolute");
             this.html.toggleClass("dragged", true);
@@ -41,35 +53,41 @@ function Tile(i) {
 
             let currentDroppable = null;
 
-            function moveAt(pageX, pageY){
-                this.html.css("left", pageX - shiftX + "px");
-                this.html.css("top", pageY - shiftY + "px");
-            }
-
             function onMouseUp(ev) {
                 $(document).off("mousemove");
+                this.html.off("mouseup");
                 this.html.toggleClass("dragged", false);
-                $(currentDroppable).css("border", "1px solid black");
-                //game.dragAndDrop(oldParent, newParent);
+                this.html.css("position", "relative");
+                this.html.css("left","");
+                this.html.css("top","");
+                this.html.css("zIndex","");
+
+                let error = "Drag tiles onto a square";
+                if (currentDroppable) {
+                    if (oldParentHtml[0] == document.body) debugger;
+                    const oldParent = Square.fromDom(oldParentHtml);
+                    const newParent = Square.fromDom($(currentDroppable));
+                    error = game.onDragDrop(oldParent, newParent);
+                }
+                if (error) {
+                    oldParentHtml.append(this.html);
+                }
+                game.error(error);
             }
 
             function onMouseMove(ev) {
-                moveAt.bind(this)(ev.pageX, ev.pageY);
+                moveAt(ev.pageX, ev.pageY);
 
                 let square = null;
-                this.html[0].hidden = true;
-                let elemBelow = document.elementFromPoint(ev.clientX, ev.clientY); // This is grabbing part of the SVG. why?
-                this.html[0].hidden = false;
-                if (elemBelow) square = elemBelow.closest(".square");
+                // No matter what I do, this returns the svg too. this.html[0].hidden = true does nothing, which https://developer.mozilla.org/en-US/docs/Web/API/Document/elementsFromPoint supports.
+                let elemsBelow = document.elementsFromPoint(ev.clientX, ev.clientY);
+                for (let i=0; i<elemsBelow.length; i++)
+                    if (elemsBelow[i].classList.contains("square")) square = elemsBelow[i];
                 currentDroppable = square;
             }
 
             $(document).on("mousemove", onMouseMove.bind(this));
             this.html.on("mouseup", onMouseUp.bind(this));
-        },
-        snapBack() {
-            this.oldParent.append(this.html);
-            this.oldParent = null;
         },
         markInert() {
             this.html.toggleClass("valid", false);
@@ -92,32 +110,19 @@ Tile.random = function() {
 }
 
 function Square(place) {
-    const tile = {
+    const sq = {
         html: $('<div class="square"></div>'),
         // A slot where tiles can be placed. Doesn't know about game logic.
-        place: place,
+        _place: place,
+        isPool: place[0]=="pool",
+        isGrid: place[0]=="grid",
+        loc: place[1],
+        slot: place[1],
         init() {
-            this.html.on("drop", this.onDrop.bind(this));
-            this.html.on("dragover", this.onDragOver.bind(this));
-            this.html.data("place", this.place);
+            this.html.data("place", this._place);
+            //this.html.text(JSON.stringify(this._place[1]));
         },
-        onDragOver(ev) { // Allow Drop
-            //console.log("onAllowDrop", ev);
-            ev.preventDefault();
-        },
-        onDrop(ev) {
-            ev.preventDefault();
-            var data = ev.originalEvent.dataTransfer.getData("text");
-            const tile = document.getElementById(data);
-            // Check if allowed
-            // If so, call square.move
-            //const source = Square.find($(tile).parent().data("place"));
-            //const target = this;
-            //game.onDragDrop(source, target)
-            console.log("onDrop", data, tile, "hello");
-            ev.target.appendChild(tile);
-        },
-        moveTo(square) {
+        moveTileTo(square) {
             square.place(this.tile);
             this._remove();
         },
@@ -128,17 +133,28 @@ function Square(place) {
         _remove(tile) {
             this.tile = null;
             // No HTML needed
-        }
+        },
+        markVisible() {
+            this.html.toggleClass("visible", true);
+        },
+        markInvisible() {
+            this.html.toggleClass("visible", false);
+        },
     }
-    tile.init();
-    return tile;
+    sq.init();
+    return sq;
 }
 Square.find = function(place) {
+    if (!place) debugger;
     if (place[0] == "grid") {
-        return game.grid[place[1]][place[2]];
+        return game.grid[place[1].row][place[1].col];
     } else if (place[0] == "pool") {
         return game.pool[place[1]];
     }
+}
+Square.fromDom = function(e) {
+    const place = e.data("place");
+    return Square.find(place);
 }
 
 const game = {
@@ -146,6 +162,7 @@ const game = {
         this.html = html;
     },
     start() {
+        this.points = 0;
         // Grid
         this.left = 0;
         this.right = 0;
@@ -155,36 +172,37 @@ const game = {
         this.addHtmlRowBottom();
         this.grid = [[]];
         this.addGridSquare({row: 0, col: 0})
+        this.grid[0][0].markVisible();
         // Pool
         this.html.pool.empty();
         this.pool = [];
-        for (let i=0; i<10; i++) this.addPoolSquare(i);
-        for (let i=0; i<10; i++) this.drawPoolTile(i);
+        for (let i=0; i<11; i++) this.addPoolSquare(i);
+        for (let i=0; i<11; i++) this.drawPoolTile(i);
         // Game logic
         // invalidTile and poolVacancy are either both set or both null.
         // There is only allowed to be one tile in an invalid position at a time.
         this.invalidTile = null;
         this.poolVacancy = null;
     },
-    newHtmlRow() { return $("<tr></tr>"); },
+    newHtmlRow() { return $('<div class="grid-row"></div>'); },
     addHtmlRowTop() { this.html.grid.prepend(this.newHtmlRow()); },
     addHtmlRowBottom() { this.html.grid.append(this.newHtmlRow()); },
     addGridSquare(loc) {
-        const square = new Square("grid", loc.row, loc.col);
+        const square = new Square(["grid", loc]);
+        square.markInvisible();
         this.grid[loc.row][loc.col] = square;
-        const row = this.html.grid.find("tr").eq(loc.row);
-        if (!row) {
-            const tr = $("<tr></tr>")
-            this.html.grid.after(tr);
-        }
-        if (loc.col == 0) {
+        const i=loc.row-this.top;
+        const j=loc.col-this.left;
+        const row = this.html.grid.find(".grid-row").eq(i);
+        if (!row) debugger;
+        if (j == 0) {
             row.prepend(square.html);
         } else {
-            row.eq(loc.col).after(square.html); // Hack! Assumes no gaps
+            row.find(".square").eq(j-1).after(square.html); // Hack! Assumes no gaps
         }
     },
     addPoolSquare(slot) {
-        const square = new Square("pool", slot);
+        const square = new Square(["pool", slot]);
         this.pool[slot] = square;
         this.html.pool.append(square.html); // Hack! Assumes left-to-right
     },
@@ -192,6 +210,9 @@ const game = {
         const tile = Tile.random();
         this.pool[slot].place(tile);
         tile.markDraggable();
+    },
+    incrementScore() {
+        this.html.score.text(++this.points);
     },
     addCol(col) { for (let i=this.top; i<=this.bottom; i++) this.addGridSquare({row: i, col:col}); },
     addRow(row) { for (let i=this.left; i<=this.right; i++) this.addGridSquare({row: row, col:i}); },
@@ -215,65 +236,111 @@ const game = {
         this.addHtmlRowBottom();
         this.addRow(this.bottom);
     },
-    neighbors(loc) {
+    neighborSquares(loc) {
+        const get = (function(row, col) {
+            return (this.grid[row]||[])[col];
+        }).bind(this)
         return {
-            top:    this.grid[loc.row-1][loc.col].tile,
-            bottom: this.grid[loc.row+1][loc.col].tile,
-            left:   this.grid[loc.row][loc.col-1].tile,
-            right:  this.grid[loc.row][loc.col+1].tile,
+            top:    get(loc.row-1, loc.col),
+            bottom: get(loc.row+1, loc.col),
+            left:   get(loc.row, loc.col-1),
+            right:  get(loc.row, loc.col+1),
         }
     },
-    canPlaceTileFromPool(tile, loc, slot) {
+    neighborTiles(loc) {
+        let r = {};
+        for (let [dir, neighborSquare] of Object.entries(this.neighborSquares(loc)))
+            r[dir]=neighborSquare ? neighborSquare.tile : null;
+        return r;
+    },
+    canPlaceTileFromPool(tile, slot, loc) {
+        console.log("canPlaceTileFromPool");
         if (this.invalidTile) return false;
-        if (!validTargetSquare(loc)) return false;
+        if (!this.validTargetSquare(loc)) return false;
         return true;
     },
     validTargetSquare(loc) {
         // A target is valid if it has any neighbor
-        const n = neighbors(loc);
+        // TODO: Restrict to a maximum size, like 5x5 or 10x10
+        if (loc.row == 0 && loc.col == 0) return true; // Bootstrap
+        const n = this.neighborTiles(loc);
         return n.top || n.bottom || n.left || n.right;
     },
     isTileValid(tile, loc) {
         // Does it fit with all its current neighbors?
-        const n = neighbors(loc);
+        const n = this.neighborTiles(loc);
         return ((!n.top || n.top.bottom == tile.top) &&
                 (!n.bottom || n.bottom.top == tile.bottom) &&
                 (!n.left || n.left.right == tile.left) &&
                 (!n.right || n.right.left == tile.right));
     },
     canMoveTileToPool(tile, loc, slot) {
-        if (this.poolSquare[slot].tile != null) return false;
+        if (this.pool[slot].tile != null) return false;
         return this.invalidTile == tile;
     },
     onDragDrop(sourceSquare, targetSquare) {
-        // Find tile's original square
-        // Find original square position
-        // Find target square position
+        //console.log("source", sourceSquare);
+        //console.log("target", targetSquare);
+        if (!targetSquare) return "You must drag to a square";
+        if (!sourceSquare) throw "HUH";
+        const tile = sourceSquare.tile;
+        if (sourceSquare.isPool && targetSquare.isGrid) {
+            if (!this.canPlaceTileFromPool(tile, sourceSquare.slot, targetSquare.loc)) return "You must drag to a neighboring, unoccupied square";
+            this.placeTileFromPool(tile, sourceSquare.slot, targetSquare.loc);
+            return;
+        } else if (sourceSquare.isGrid && targetSquare.isPool) {
+            if (!this.canMoveTileToPool(tile, sourceSquare.loc, targetSquare.slot)) return "You must drag to an empty square";
+            this.moveTileToPool(tile, sourceSquare.loc, targetSquare.slot);
+        } else if (sourceSquare.isPool && targetSquare.isPool) {
+            if (!this.canMovePoolToPool(tile, sourceSquare.slot, targetSquare.slot)) return "You must drag to an empty square";
+            this.movePoolToPool(tile, sourceSquare.slot, targetSquare.slot);
+        } else if (sourceSquare.isGrid && targetSquare.isGrid) {
+            // Always disallow because of complications with determining neighbors, etc
+            return "You must drag the tile back to your hand first";
+        } else {
+            debugger;
+            return "This should never be reached";
+        }
+        // Parent should NOT be body here.
+    },
+    error(m) {
+        this.html.error.text(m||"");
+    },
+    canMovePoolToPool(tile, slotFrom, slotTo) {
+        return !this.pool[slotTo].tile;
+    },
+    movePoolToPool(tile, slotFrom, slotTo) {
+        console.log("movePoolToPool", tile, slotFrom, slotTo);
+        this.pool[slotFrom].moveTileTo(this.pool[slotTo]);
+        this.poolVacancy = slotFrom;
     },
     moveTileToPool(tile, loc, slot) {
+        console.log("moveTileToPool", tile, loc, slot);
         tile.markInert();
         tile.markDraggable();
-        this.grid[loc.row][loc.col].moveTileTo(this.poolSquare[slot]);
+        this.grid[loc.row][loc.col].moveTileTo(this.pool[slot]);
         this.invalidTile = null;
         this.poolVacancy = null;
     },
-    placeTileFromPool(tile, loc, slot) {
-        const can = canPlaceTileFromPool(tile, loc, slot);
-        if (!can) return; // Rejected!
-        const valid = isTileValid(tile, loc);
-        this.poolSquare[slot].moveTileTo(this.grid[loc.row][loc.col]);
+    placeTileFromPool(tile, slot, loc) {
+        console.log("placeTileFromPool", tile, slot, loc);
+        const valid = this.isTileValid(tile, loc);
+        this.pool[slot].moveTileTo(this.grid[loc.row][loc.col]);
         if (valid) {
             tile.markValid();
             tile.markUndraggable();
 
             // Expand if needed
-            if (loc.row==this.top) this.expendAreaTop();
-            if (loc.row==this.bottom) this.expendAreaBottom();
-            if (loc.col==this.left) this.expendAreaLeft();
-            if (loc.col==this.right) this.expendAreaRight();
+            if (loc.row==this.top) this.expandAreaTop();
+            if (loc.row==this.bottom) this.expandAreaBottom();
+            if (loc.col==this.left) this.expandAreaLeft();
+            if (loc.col==this.right) this.expandAreaRight();
+            for (let [dir, neighbor] of Object.entries(this.neighborSquares(loc))) neighbor.markVisible();
 
             // Draw to replace pool
-            this.drawPoolTile(this.poolVacancy);
+            this.drawPoolTile(slot);
+
+            this.incrementScore();
         } else {
             tile.markInvalid();
             tile.markDraggable();
@@ -290,6 +357,8 @@ $(document).ready(() => {
     game.attach({
         grid: $(".grid"),
         pool: $(".pool"),
+        error: $(".error"),
+        score: $(".score"),
     });
     game.start();
 });

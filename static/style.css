@@ -1,16 +1,34 @@
 /* -- This specific Hack-A-Day project -- */
 
 .square {
-    border: 5px solid grey;
-    margin: 2px;
+    border: 5px solid white;
+    margin: 3px;
     border-radius: 3px;
-    height: 110px;
-    width: 110px;
+    height: 90px;
+    width: 90px;
     vertical-align: top;
+}
+.square:empty {
+    border-color: lightgrey;
+}
+.grid .square {
+    visibility: hidden;
+    display: inline-block;
+}
+.grid .square.visible {
+    visibility: visible;
+}
+.grid .square.visible:empty {
+    border-color: lightgrey;
 }
 .pool .square {
     border-color: orange;
     display: inline-block;
+}
+
+.error {
+    background: pink;
+    font-size: large;
 }
 
 .tile.dragged {
@@ -19,8 +37,8 @@
 
 .tile {
     border: 2px solid black;
-    height: 100px;
-    width: 100px;
+    height: 80px;
+    width: 80px;
 }
 
 .tile.valid {
@@ -29,12 +47,20 @@
 
 .tile.invalid {
     border: 2px solid red;
-    animation: flashboder 1s linear infinite;
+    animation: flashborder 1s linear infinite;
+}
+.tile.invalid rect:nth-child(5) {
+    display: none;
 }
 
 @keyframes flashborder {
-    from { border: 2px solid red; }
-    to { border: 2px solid pink; }
+    from { border: 5px solid red; }
+    to { border: 5px solid pink; }
+}
+
+/* Speeds up drag-and-drop */
+svg * {
+    pointer-events: none;
 }
 
 /* -- All Hack-A-Day projects -- */
