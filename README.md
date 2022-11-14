@@ -6,6 +6,6 @@ This is a tile-placing game. Try to beat your high score. The tiles used are a f
 
 ![Screenshot](screenshot.png)
 
-Demo available at [here](https://tilde.za3k.com/hackaday/tile).
+Demo available [here](https://tilde.za3k.com/hackaday/tile).
 
 Source available on [github](https://github.com/za3k/day11_tile).
